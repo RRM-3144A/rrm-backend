@@ -41,3 +41,24 @@ class TeamCreate(BaseModel):
 class UserUpdate(BaseModel):
     role: Role | None = None
     team_id: int | None = None
+
+
+class CategoryBase(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = None
+
+
+class CategoryCreate(CategoryBase):
+    pass
+
+
+class CategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+
+
+class CategoryOut(CategoryBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    resource_count: int = 0
