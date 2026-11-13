@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import Role
 
@@ -32,3 +32,12 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class TeamCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class UserUpdate(BaseModel):
+    role: Role | None = None
+    team_id: int | None = None
