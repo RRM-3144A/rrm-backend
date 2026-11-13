@@ -3,7 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Role, User
+from app.models import Resource, Role, User
 from app.security import AuthError, decode_access_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -39,3 +39,11 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != Role.ADMIN:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator role required")
     return user
+
+
+def ensure_resource_admin(resource: Resource, user: User) -> None:
+    """Only administrators assigned to the resource may change its settings."""
+    if user.role != Role.ADMIN or user not in resource.admins:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Only this resource's administrators can change it"
+        )

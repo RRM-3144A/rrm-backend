@@ -24,7 +24,9 @@ docker compose up -d db
 ## Tests
 
 ```bash
-.venv/bin/pytest
+.venv/bin/pytest                      # in-memory SQLite
+docker compose exec db psql -U rrm -c 'CREATE DATABASE rrm_test'
+TEST_DATABASE_URL=postgresql+psycopg://rrm:rrm@localhost:5432/rrm_test .venv/bin/pytest   # PostgreSQL
 ```
 
 ## Database migrations
