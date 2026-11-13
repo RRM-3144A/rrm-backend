@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-secret-change-me-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
+    admin_emails: str = ""
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {email.strip().lower() for email in self.admin_emails.split(",") if email.strip()}
 
     @property
     def cors_origin_list(self) -> list[str]:
