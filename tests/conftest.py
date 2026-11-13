@@ -1,6 +1,7 @@
 import os
 
 os.environ["DATABASE_URL"] = "sqlite://"
+os.environ["JWT_SECRET"] = "test-secret-that-is-long-enough-for-hs256"
 
 import pytest
 from fastapi.testclient import TestClient
