@@ -16,11 +16,22 @@ from app.security import create_access_token
 from app.main import app
 
 
-@pytest.fixture
-def db():
-    engine = create_engine(
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+
+
+def _make_engine():
+    """In-memory SQLite by default; set TEST_DATABASE_URL to run against PostgreSQL."""
+    if TEST_DATABASE_URL:
+        return create_engine(TEST_DATABASE_URL)
+    return create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+
+
+@pytest.fixture
+def db():
+    engine = _make_engine()
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)()
     try:
