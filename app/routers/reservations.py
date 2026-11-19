@@ -1,0 +1,51 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.dependencies import get_current_user
+from app.models import Reservation, User
+from app.schemas import ReservationOut, ReservationStatusUpdate
+from app.services.reservations import (
+    cancel_reservation,
+    get_reservation_or_404,
+    transition_reservation,
+)
+
+router = APIRouter(prefix="/reservations", tags=["Reservations"])
+
+
+@router.patch("/{reservation_id}/status", response_model=ReservationOut)
+def update_reservation_status(
+    reservation_id: int,
+    body: ReservationStatusUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Reservation:
+    reservation = get_reservation_or_404(db, reservation_id)
+    return transition_reservation(
+        db,
+        reservation,
+        user,
+        body.status,
+        rejection_reason=body.rejection_reason,
+    )
+
+
+@router.post("/{reservation_id}/cancel", response_model=ReservationOut)
+def cancel_reservation_action(
+    reservation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Reservation:
+    reservation = get_reservation_or_404(db, reservation_id)
+    return cancel_reservation(db, reservation, user)
+
+
+@router.delete("/{reservation_id}", response_model=ReservationOut)
+def delete_reservation(
+    reservation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Reservation:
+    reservation = get_reservation_or_404(db, reservation_id)
+    return cancel_reservation(db, reservation, user)
