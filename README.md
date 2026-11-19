@@ -21,6 +21,21 @@ docker compose up -d db
 .venv/bin/uvicorn app.main:app --reload
 ```
 
+## Test data
+
+After `alembic upgrade head`, load realistic test data (users, teams, categories, resources
+with schedules, reservations in every status, maintenance windows, a waitlist entry):
+
+```bash
+.venv/bin/python -m app.seed
+```
+
+Reservations are placed in the week after the current one. Running the command again adds
+nothing new. Accounts listed in `ADMIN_EMAILS` become administrators of every resource.
+
+To recreate the database from scratch: `alembic downgrade base && alembic upgrade head`,
+then run the seed again.
+
 ## Tests
 
 ```bash
