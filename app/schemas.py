@@ -179,6 +179,11 @@ class ReservationCreate(BaseModel):
     team_id: int | None = None
 
 
+class ReservationStatusUpdate(BaseModel):
+    status: ReservationStatus
+    rejection_reason: str | None = None
+
+
 class ReservationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
