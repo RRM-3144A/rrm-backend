@@ -1,3 +1,4 @@
+import enum
 from datetime import datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -128,3 +129,17 @@ class ScheduleInterval(BaseModel):
 
 class ScheduleUpdate(BaseModel):
     intervals: list[ScheduleInterval]
+
+
+class SlotStatus(str, enum.Enum):
+    FREE = "FREE"
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    MAINTENANCE = "MAINTENANCE"
+
+
+class AvailabilitySlot(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    status: SlotStatus
+    free_places: int = Field(description="Teams that can still book this slot")
