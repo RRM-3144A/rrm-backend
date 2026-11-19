@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import MaintenanceWindow, Resource, User
+from app.models import MaintenanceWindow, Reservation, ReservationStatus, Resource, User
 from app.schemas import MaintenanceCreate, MaintenanceOut
 from app.services.schedule import local_timezone
 
@@ -76,6 +76,59 @@ def find_overlap(
     ).first()
 
 
+def mark_overlapping_reservations_for_review(
+    db: Session, resource_id: int, start_at: datetime, end_at: datetime
+) -> list[Reservation]:
+    """Flags existing APPROVED reservations overlapping [start_at, end_at) with needs_review=True."""
+    range_start = as_utc(start_at)
+    range_end = as_utc(end_at)
+
+    approved = list(
+        db.scalars(
+            select(Reservation).where(
+                Reservation.resource_id == resource_id,
+                Reservation.status == ReservationStatus.APPROVED,
+            )
+        )
+    )
+    flagged: list[Reservation] = []
+    for reservation in approved:
+        if as_utc(reservation.start_at) < range_end and as_utc(reservation.end_at) > range_start:
+            reservation.needs_review = True
+            flagged.append(reservation)
+    return flagged
+
+
+def clear_resolved_review_flags(db: Session, resource_id: int) -> None:
+    """Clears needs_review on APPROVED reservations no longer overlapping any active maintenance."""
+    active_windows = list(
+        db.scalars(
+            select(MaintenanceWindow).where(
+                MaintenanceWindow.resource_id == resource_id,
+                MaintenanceWindow.cancelled_at.is_(None),
+            )
+        )
+    )
+    flagged_reservations = list(
+        db.scalars(
+            select(Reservation).where(
+                Reservation.resource_id == resource_id,
+                Reservation.status == ReservationStatus.APPROVED,
+                Reservation.needs_review.is_(True),
+            )
+        )
+    )
+    for reservation in flagged_reservations:
+        res_start = as_utc(reservation.start_at)
+        res_end = as_utc(reservation.end_at)
+        still_affected = any(
+            as_utc(w.start_at) < res_end and as_utc(w.end_at) > res_start
+            for w in active_windows
+        )
+        if not still_affected:
+            reservation.needs_review = False
+
+
 def create_window(
     db: Session, resource: Resource, user: User, body: MaintenanceCreate
 ) -> MaintenanceWindow:
@@ -91,6 +144,7 @@ def create_window(
         created_by=user.id,
     )
     db.add(window)
+    mark_overlapping_reservations_for_review(db, resource.id, body.start_at, body.end_at)
     return window
 
 

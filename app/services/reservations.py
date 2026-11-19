@@ -10,12 +10,13 @@ from app.models import (
     OperatingSchedule,
     Reservation,
     ReservationStatus,
+    Resource,
     ResourceStatus,
     Role,
     Team,
     User,
 )
-from app.schemas import ReservationCreate
+from app.schemas import ReservationCreate, ReservationRescheduleRequest
 from app.services.availability import APPROVED_STATUSES, PENDING_STATUSES, _as_utc, _overlaps
 from app.services.schedule import SLOT_MINUTES, local_timezone
 from app.services.sharing import (
@@ -50,6 +51,12 @@ ADMIN_DECISION_STATUSES = {
     ReservationStatus.APPROVED,
     ReservationStatus.REJECTED,
     ReservationStatus.AWAITING_TRAINING,
+}
+
+RESCHEDULABLE_STATUSES = {
+    ReservationStatus.PENDING,
+    ReservationStatus.AWAITING_TRAINING,
+    ReservationStatus.APPROVED,
 }
 
 
@@ -112,6 +119,25 @@ def _validate_operating_schedule(
         )
 
 
+def _ensure_no_maintenance_overlap(
+    db: Session, resource_id: int, start_utc: datetime, end_utc: datetime
+) -> None:
+    windows = list(
+        db.scalars(
+            select(MaintenanceWindow).where(
+                MaintenanceWindow.resource_id == resource_id,
+                MaintenanceWindow.cancelled_at.is_(None),
+            )
+        )
+    )
+    for window in windows:
+        if _overlaps((start_utc, end_utc), (_as_utc(window.start_at), _as_utc(window.end_at))):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"Resource is scheduled for maintenance during this slot: {window.reason}",
+            )
+
+
 def create_reservation_request(
     db: Session, user: User, body: ReservationCreate
 ) -> Reservation:
@@ -147,21 +173,7 @@ def create_reservation_request(
                 f"Reservation exceeds maximum duration of {resource.max_duration_min} minutes",
             )
 
-    windows = list(
-        db.scalars(
-            select(MaintenanceWindow).where(
-                MaintenanceWindow.resource_id == resource.id,
-                MaintenanceWindow.cancelled_at.is_(None),
-            )
-        )
-    )
-    for window in windows:
-        if _overlaps((start_utc, end_utc), (_as_utc(window.start_at), _as_utc(window.end_at))):
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                f"Resource is scheduled for maintenance during this slot: {window.reason}",
-            )
-
+    _ensure_no_maintenance_overlap(db, resource.id, start_utc, end_utc)
     _validate_operating_schedule(db, resource.id, local_start, local_end)
 
     team_id = body.team_id if body.team_id is not None else user.team_id
@@ -260,6 +272,7 @@ def cancel_reservation(
             )
 
     reservation.status = ReservationStatus.CANCELLED
+    reservation.needs_review = False
     db.commit()
     db.refresh(reservation)
     return reservation
@@ -282,6 +295,9 @@ def transition_reservation(
 
     if target_status == ReservationStatus.APPROVED:
         resource = lock_resource_for_booking(db, reservation.resource_id)
+        _ensure_no_maintenance_overlap(
+            db, resource.id, _as_utc(reservation.start_at), _as_utc(reservation.end_at)
+        )
         try:
             ensure_capacity_available(
                 db,
@@ -304,6 +320,106 @@ def transition_reservation(
         reservation.decided_at = _as_utc(now or datetime.now(timezone.utc))
 
     reservation.status = target_status
+    db.commit()
+    db.refresh(reservation)
+    return reservation
+
+
+def list_reservations_needing_review(
+    db: Session, admin: User, resource_id: int | None = None
+) -> list[Reservation]:
+    managed_ids = list(
+        db.scalars(
+            select(Resource.id).where(Resource.admins.any(User.id == admin.id))
+        )
+    )
+    if not managed_ids:
+        return []
+
+    if resource_id is not None:
+        if resource_id not in managed_ids:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "You are not an administrator of this resource",
+            )
+        target_ids = [resource_id]
+    else:
+        target_ids = managed_ids
+
+    return list(
+        db.scalars(
+            select(Reservation)
+            .where(
+                Reservation.resource_id.in_(target_ids),
+                Reservation.needs_review.is_(True),
+                Reservation.status == ReservationStatus.APPROVED,
+            )
+            .order_by(Reservation.start_at.asc(), Reservation.id.asc())
+        )
+    )
+
+
+def reschedule_reservation(
+    db: Session,
+    reservation_id: int,
+    admin: User,
+    body: ReservationRescheduleRequest,
+) -> Reservation:
+    reservation = get_reservation_or_404(db, reservation_id)
+    resource = lock_resource_for_booking(db, reservation.resource_id)
+    ensure_resource_admin(resource, admin)
+
+    if reservation.status not in RESCHEDULABLE_STATUSES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Cannot reschedule reservation in status {reservation.status.value}",
+        )
+
+    start_utc = _as_utc(body.start_at)
+    end_utc = _as_utc(body.end_at)
+    tz = local_timezone()
+    local_start = start_utc.astimezone(tz)
+    local_end = end_utc.astimezone(tz)
+
+    _validate_slot_interval(local_start, local_end)
+
+    if resource.status != ResourceStatus.ACTIVE:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Resource is not active",
+        )
+
+    if resource.max_duration_min is not None:
+        duration_min = int((end_utc - start_utc).total_seconds()) // 60
+        if duration_min > resource.max_duration_min:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"Reservation exceeds maximum duration of {resource.max_duration_min} minutes",
+            )
+
+    _ensure_no_maintenance_overlap(db, resource.id, start_utc, end_utc)
+    _validate_operating_schedule(db, resource.id, local_start, local_end)
+
+    statuses_to_check = (
+        APPROVED_STATUSES if reservation.status == ReservationStatus.APPROVED else BLOCKING_STATUSES
+    )
+    try:
+        ensure_capacity_available(
+            db,
+            resource,
+            start_utc,
+            end_utc,
+            statuses=statuses_to_check,
+            exclude_reservation_id=reservation.id,
+        )
+    except CapacityConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+    reservation.start_at = start_utc
+    reservation.end_at = end_utc
+    reservation.needs_review = False
+    reservation.decided_by = admin.id
+    reservation.decided_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(reservation)
     return reservation

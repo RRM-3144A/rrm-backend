@@ -9,6 +9,7 @@ from app.schemas import MaintenanceCreate, MaintenanceOut
 from app.services.maintenance import (
     MaintenanceConflict,
     cancel_window,
+    clear_resolved_review_flags,
     create_window,
     list_windows,
     to_out,
@@ -60,4 +61,5 @@ def cancel_maintenance(
     if window is None or window.resource_id != resource.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Maintenance window not found")
     cancel_window(window)
+    clear_resolved_review_flags(db, resource.id)
     db.commit()

@@ -237,3 +237,7 @@ class PendingReservationOut(BaseModel):
     team: TeamOut | None = None
     is_first_reservation: bool
     has_completed_training: bool = False
+
+class ReservationRescheduleRequest(BaseModel):
+    start_at: datetime
+    end_at: datetime
