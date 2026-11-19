@@ -200,3 +200,33 @@ class ReservationOut(BaseModel):
     decided_by: int | None = None
     decided_at: datetime | None = None
     created_at: datetime | None = None
+
+
+class ReservationResourceSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    location: str | None = None
+    requires_training: bool = False
+    max_concurrent_teams: int = 1
+
+
+class PendingReservationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    resource_id: int
+    team_id: int | None = None
+    start_at: datetime
+    end_at: datetime
+    purpose: str | None = None
+    status: ReservationStatus
+    needs_review: bool = False
+    created_at: datetime | None = None
+    user: UserOut
+    resource: ReservationResourceSummary
+    team: TeamOut | None = None
+    is_first_reservation: bool
+    has_completed_training: bool = False
