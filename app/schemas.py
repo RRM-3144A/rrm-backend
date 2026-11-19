@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -116,3 +116,15 @@ class ResourceOut(ResourceFields):
     category: CategoryBase
     category_id: int
     admins: list[AdminSummary]
+
+
+class ScheduleInterval(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    weekday: int = Field(ge=0, le=6, description="0 = Monday, 6 = Sunday")
+    start_time: time
+    end_time: time
+
+
+class ScheduleUpdate(BaseModel):
+    intervals: list[ScheduleInterval]

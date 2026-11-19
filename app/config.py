@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
     admin_emails: str = ""
+    timezone: str = "Europe/Bucharest"
 
     @property
     def admin_email_set(self) -> set[str]:
