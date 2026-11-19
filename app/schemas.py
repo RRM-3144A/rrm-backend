@@ -171,6 +171,14 @@ class MaintenanceOut(BaseModel):
 from app.models import ReservationStatus
 
 
+class ReservationCreate(BaseModel):
+    resource_id: int
+    start_at: datetime
+    end_at: datetime
+    purpose: str | None = None
+    team_id: int | None = None
+
+
 class ReservationStatusUpdate(BaseModel):
     status: ReservationStatus
     rejection_reason: str | None = None
