@@ -3,7 +3,7 @@ from datetime import datetime, time
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from app.models import ResourceStatus, Role
+from app.models import ReservationStatus, ResourceStatus, Role
 
 
 class GoogleLoginRequest(BaseModel):
@@ -168,8 +168,6 @@ class MaintenanceOut(BaseModel):
     created_by: int | None
     cancelled_at: datetime | None
 
-from app.models import ReservationStatus
-
 
 class ReservationCreate(BaseModel):
     resource_id: int
@@ -182,6 +180,15 @@ class ReservationCreate(BaseModel):
 class ReservationStatusUpdate(BaseModel):
     status: ReservationStatus
     rejection_reason: str | None = None
+
+
+class ReservationRejectRequest(BaseModel):
+    reason: str | None = None
+    rejection_reason: str | None = None
+
+    @property
+    def effective_reason(self) -> str | None:
+        return self.reason if self.reason is not None else self.rejection_reason
 
 
 class ReservationOut(BaseModel):
