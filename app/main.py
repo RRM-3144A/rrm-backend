@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, categories, health, resources, schedule, users
+from app.routers import auth, availability, categories, health, resources, schedule, users
 
 app = FastAPI(title="Research Resource Manager API", version="0.1.0")
 
@@ -20,3 +20,4 @@ app.include_router(users.router)
 app.include_router(categories.router)
 app.include_router(resources.router)
 app.include_router(schedule.router)
+app.include_router(availability.router)
