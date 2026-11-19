@@ -9,6 +9,7 @@ from app.schemas import (
     ReservationCreate,
     ReservationOut,
     ReservationRejectRequest,
+    ReservationRescheduleRequest,
     ReservationStatusUpdate,
 )
 from app.services.admin_decisions import (
@@ -21,6 +22,8 @@ from app.services.reservations import (
     cancel_reservation,
     create_reservation_request,
     get_reservation_or_404,
+    list_reservations_needing_review,
+    reschedule_reservation,
     transition_reservation,
 )
 
@@ -34,6 +37,15 @@ def get_pending_reservations(
     admin: User = Depends(require_admin),
 ) -> list[PendingReservationOut]:
     return list_admin_pending_reservations(db, admin, resource_id=resource_id)
+
+
+@router.get("/needs-review", response_model=list[ReservationOut])
+def get_reservations_needing_review(
+    resource_id: int | None = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> list[Reservation]:
+    return list_reservations_needing_review(db, admin, resource_id=resource_id)
 
 
 @router.post("", response_model=ReservationOut, status_code=status.HTTP_201_CREATED)
@@ -89,6 +101,16 @@ def awaiting_training_endpoint(
     admin: User = Depends(get_current_user),
 ) -> Reservation:
     return mark_awaiting_training(db, reservation_id, admin)
+
+
+@router.post("/{reservation_id}/reschedule", response_model=ReservationOut)
+def reschedule_reservation_endpoint(
+    reservation_id: int,
+    body: ReservationRescheduleRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_user),
+) -> Reservation:
+    return reschedule_reservation(db, reservation_id, admin, body)
 
 
 @router.post("/{reservation_id}/cancel", response_model=ReservationOut)
