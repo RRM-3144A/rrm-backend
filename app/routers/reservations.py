@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -14,10 +14,12 @@ from app.schemas import (
 )
 from app.services.admin_decisions import (
     approve_reservation,
+    complete_training,
     mark_awaiting_training,
     reject_reservation,
 )
 from app.services.admin_requests import list_admin_pending_reservations
+from app.services.notifications import send_in_background
 from app.services.reservations import (
     cancel_reservation,
     create_reservation_request,
@@ -101,6 +103,18 @@ def awaiting_training_endpoint(
     admin: User = Depends(get_current_user),
 ) -> Reservation:
     return mark_awaiting_training(db, reservation_id, admin)
+
+
+@router.post("/{reservation_id}/complete-training", response_model=ReservationOut)
+def complete_training_endpoint(
+    reservation_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_user),
+) -> Reservation:
+    reservation, notification = complete_training(db, reservation_id, admin)
+    send_in_background(background_tasks, [notification])
+    return reservation
 
 
 @router.post("/{reservation_id}/reschedule", response_model=ReservationOut)

@@ -133,6 +133,21 @@ def notify_decision(db: Session, reservation: Reservation) -> Notification:
     db.flush()
     return notification
 
+def notify_training_completed(db: Session, reservation: Reservation) -> Notification:
+    """Notification for the requester that training is completed and approval resumes."""
+    resource = reservation.resource.name
+    interval = format_interval(reservation.start_at, reservation.end_at)
+    content = EmailContent(
+        subject=f"Instruire finalizată: {resource}",
+        body=(
+            f"Bună, {reservation.user.first_name},\n\n"
+            f"Instruirea pentru rezervarea ta la {resource} ({interval}) a fost marcată ca "
+            f"finalizată. Cererea a revenit în analiză pentru aprobare." + _footer()
+        ),
+    )
+    notification = _create(db, reservation.user, reservation, NotificationType.NEW_REQUEST, content)
+    db.flush()
+    return notification
 
 def deliver_with(db: Session, notification_ids: list[int], sender: EmailSender) -> None:
     """Sends the unsent notifications; a failed e-mail is logged and stays unsent."""

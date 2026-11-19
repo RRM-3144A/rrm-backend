@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+from app.models import Notification
+from app.services.notifications import notify_training_completed
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -210,3 +212,27 @@ def mark_awaiting_training(
     db.commit()
     db.refresh(reservation)
     return reservation
+
+def complete_training(
+    db: Session, reservation_id: int, admin: User
+) -> tuple[Reservation, Notification]:
+    reservation, _ = _get_reservation_and_lock_resource(db, reservation_id, admin)
+
+    if reservation.status == ReservationStatus.CANCELLED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Reservation has already been cancelled",
+        )
+    if reservation.status != ReservationStatus.AWAITING_TRAINING:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Cannot complete training for reservation in status {reservation.status.value}",
+        )
+
+    reservation.status = ReservationStatus.PENDING
+    reservation.decided_by = admin.id
+    reservation.decided_at = datetime.now(timezone.utc)
+    notification = notify_training_completed(db, reservation)
+    db.commit()
+    db.refresh(reservation)
+    return reservation, notification
