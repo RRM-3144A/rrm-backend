@@ -13,6 +13,14 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 480
     admin_emails: str = ""
     timezone: str = "Europe/Bucharest"
+    frontend_url: str = "http://localhost:3000"
+    # E-mail: with no SMTP host the messages are only written to the log (development).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+    mail_from: str = "Research Resource Manager <rrm-noreply@usv.ro>"
 
     @property
     def admin_email_set(self) -> set[str]:

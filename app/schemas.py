@@ -3,7 +3,7 @@ from datetime import datetime, time
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from app.models import ResourceStatus, Role
+from app.models import ReservationStatus, ResourceStatus, Role
 
 
 class GoogleLoginRequest(BaseModel):
@@ -168,7 +168,18 @@ class MaintenanceOut(BaseModel):
     created_by: int | None
     cancelled_at: datetime | None
 
-from app.models import ReservationStatus
+
+class ReservationCreate(BaseModel):
+    resource_id: int
+    start_at: datetime
+    end_at: datetime
+    purpose: str | None = None
+    team_id: int | None = None
+
+
+class ReservationStatusUpdate(BaseModel):
+    status: ReservationStatus
+    rejection_reason: str | None = None
 
 
 class ReservationRejectRequest(BaseModel):
@@ -196,3 +207,33 @@ class ReservationOut(BaseModel):
     decided_by: int | None = None
     decided_at: datetime | None = None
     created_at: datetime | None = None
+
+
+class ReservationResourceSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    location: str | None = None
+    requires_training: bool = False
+    max_concurrent_teams: int = 1
+
+
+class PendingReservationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    resource_id: int
+    team_id: int | None = None
+    start_at: datetime
+    end_at: datetime
+    purpose: str | None = None
+    status: ReservationStatus
+    needs_review: bool = False
+    created_at: datetime | None = None
+    user: UserOut
+    resource: ReservationResourceSummary
+    team: TeamOut | None = None
+    is_first_reservation: bool
+    has_completed_training: bool = False
