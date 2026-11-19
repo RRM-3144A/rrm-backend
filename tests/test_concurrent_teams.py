@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy.dialects import postgresql
 
 from app.models import (
+    OperatingSchedule,
     Reservation,
     ReservationStatus,
     Resource,
@@ -25,6 +26,18 @@ def _make_shared_resource(db, admin, *, max_concurrent_teams: int = 2) -> Resour
         admins=[admin],
     )
     db.add(resource)
+    db.flush()
+
+    for weekday in range(7):
+        db.add(
+            OperatingSchedule(
+                resource_id=resource.id,
+                weekday=weekday,
+                start_time=time(0, 0),
+                end_time=time(23, 30),
+            )
+        )
+
     db.commit()
     db.refresh(resource)
     return resource
@@ -53,8 +66,8 @@ def test_two_teams_can_book_same_slot_third_is_rejected(client, db, admin, make_
     student_2 = _make_team_student(db, make_user, "Team Beta")
     student_3 = _make_team_student(db, make_user, "Team Gamma")
 
-    start_at = (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat()
-    end_at = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
+    start_at = datetime(2027, 1, 11, 10, 0, tzinfo=timezone.utc).isoformat()
+    end_at = datetime(2027, 1, 11, 12, 0, tzinfo=timezone.utc).isoformat()
 
     r1 = client.post(
         "/reservations",
@@ -85,9 +98,9 @@ def test_partial_overlap_reaching_three_teams_is_rejected(client, db, admin, mak
     s2 = _make_team_student(db, make_user, "Team 2")
     s3 = _make_team_student(db, make_user, "Team 3")
 
-    base = datetime.now(timezone.utc) + timedelta(hours=5)
+    base = datetime(2027, 1, 11, 10, 0, tzinfo=timezone.utc)
 
-    # Team 1: 00:00 -> 01:00
+    # Team 1: 10:00 -> 11:00
     assert (
         client.post(
             "/reservations",
@@ -101,7 +114,7 @@ def test_partial_overlap_reaching_three_teams_is_rejected(client, db, admin, mak
         == 201
     )
 
-    # Team 2: 00:30 -> 01:30
+    # Team 2: 10:30 -> 11:30
     assert (
         client.post(
             "/reservations",
@@ -115,7 +128,7 @@ def test_partial_overlap_reaching_three_teams_is_rejected(client, db, admin, mak
         == 201
     )
 
-    # Team 3: 00:00 -> 02:00 (overlaps both Team 1 and Team 2 between 00:30 and 01:00 -> 3 teams)
+    # Team 3: 10:00 -> 12:00 (overlaps both Team 1 and Team 2 between 10:30 and 11:00 -> 3 teams)
     r3 = client.post(
         "/reservations",
         headers=auth_headers(s3),
@@ -134,9 +147,9 @@ def test_sequential_non_overlapping_bookings_succeed(client, db, admin, make_use
     s2 = _make_team_student(db, make_user, "Seq Team 2")
     s3 = _make_team_student(db, make_user, "Seq Team 3")
 
-    base = datetime.now(timezone.utc) + timedelta(hours=6)
+    base = datetime(2027, 1, 11, 10, 0, tzinfo=timezone.utc)
 
-    # Team 1: 00:00 -> 00:30
+    # Team 1: 10:00 -> 10:30
     assert (
         client.post(
             "/reservations",
@@ -150,7 +163,7 @@ def test_sequential_non_overlapping_bookings_succeed(client, db, admin, make_use
         == 201
     )
 
-    # Team 2: 00:30 -> 01:00 (adjacent, does not overlap Team 1)
+    # Team 2: 10:30 -> 11:00 (adjacent, does not overlap Team 1)
     assert (
         client.post(
             "/reservations",
@@ -164,7 +177,7 @@ def test_sequential_non_overlapping_bookings_succeed(client, db, admin, make_use
         == 201
     )
 
-    # Team 3: 00:00 -> 01:00 (at most 2 concurrent teams at any moment -> allowed)
+    # Team 3: 10:00 -> 11:00 (at most 2 concurrent teams at any moment -> allowed)
     assert (
         client.post(
             "/reservations",
@@ -184,8 +197,8 @@ def test_single_team_resource_rejects_second_overlapping_team(client, db, admin,
     s1 = _make_team_student(db, make_user, "Solo Team 1")
     s2 = _make_team_student(db, make_user, "Solo Team 2")
 
-    start_at = (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat()
-    end_at = (datetime.now(timezone.utc) + timedelta(hours=5)).isoformat()
+    start_at = datetime(2027, 1, 11, 10, 0, tzinfo=timezone.utc).isoformat()
+    end_at = datetime(2027, 1, 11, 11, 0, tzinfo=timezone.utc).isoformat()
 
     assert (
         client.post(
@@ -211,7 +224,7 @@ def test_approving_third_overlapping_reservation_is_refused(client, db, admin, m
     s2 = _make_team_student(db, make_user, "App Team 2")
     s3 = _make_team_student(db, make_user, "App Team 3")
 
-    start_at = datetime.now(timezone.utc) + timedelta(hours=7)
+    start_at = datetime(2027, 1, 11, 10, 0, tzinfo=timezone.utc)
     end_at = start_at + timedelta(hours=1)
 
     res1 = Reservation(

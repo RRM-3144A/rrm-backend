@@ -108,13 +108,16 @@ def ensure_capacity_available(
     query = select(Reservation).where(
         Reservation.resource_id == resource.id,
         Reservation.status.in_(statuses),
-        Reservation.start_at < range_end,
-        Reservation.end_at > range_start,
     )
     if exclude_reservation_id is not None:
         query = query.where(Reservation.id != exclude_reservation_id)
 
-    overlapping = list(db.scalars(query))
+    candidates = list(db.scalars(query))
+    overlapping = [
+        r
+        for r in candidates
+        if _as_utc(r.start_at) < range_end and _as_utc(r.end_at) > range_start
+    ]
     peak = peak_concurrent_reservations(
         [(r.start_at, r.end_at) for r in overlapping],
         range_start,

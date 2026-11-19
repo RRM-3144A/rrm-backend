@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Reservation, ReservationStatus, User
+from app.models import Reservation, User
 from app.schemas import ReservationCreate, ReservationOut, ReservationStatusUpdate
-from app.services.sharing import (
-    CapacityConflictError,
-    approve_reservation_checked,
-    create_reservation_checked,
+from app.services.reservations import (
+    cancel_reservation,
+    create_reservation_request,
+    get_reservation_or_404,
+    transition_reservation,
 )
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
@@ -20,10 +21,7 @@ def create_reservation(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Reservation:
-    try:
-        return create_reservation_checked(db, user, body)
-    except CapacityConflictError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return create_reservation_request(db, user, body)
 
 
 @router.patch("/{reservation_id}/status", response_model=ReservationOut)
@@ -33,9 +31,31 @@ def update_reservation_status(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Reservation:
-    if body.status != ReservationStatus.APPROVED:
-        raise HTTPException(422, "Only APPROVED status transition is handled here")
-    try:
-        return approve_reservation_checked(db, reservation_id, user)
-    except CapacityConflictError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    reservation = get_reservation_or_404(db, reservation_id)
+    return transition_reservation(
+        db,
+        reservation,
+        user,
+        body.status,
+        rejection_reason=body.rejection_reason,
+    )
+
+
+@router.post("/{reservation_id}/cancel", response_model=ReservationOut)
+def cancel_reservation_action(
+    reservation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Reservation:
+    reservation = get_reservation_or_404(db, reservation_id)
+    return cancel_reservation(db, reservation, user)
+
+
+@router.delete("/{reservation_id}", response_model=ReservationOut)
+def delete_reservation(
+    reservation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Reservation:
+    reservation = get_reservation_or_404(db, reservation_id)
+    return cancel_reservation(db, reservation, user)
