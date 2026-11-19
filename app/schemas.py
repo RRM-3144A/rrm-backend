@@ -171,6 +171,37 @@ class MaintenanceOut(BaseModel):
 from app.models import ReservationStatus
 
 
+class ReservationCreate(BaseModel):
+    resource_id: int
+    start_at: datetime
+    end_at: datetime
+    purpose: str | None = None
+    team_id: int | None = None
+
+
+class ReservationStatusUpdate(BaseModel):
+    status: ReservationStatus
+    rejection_reason: str | None = None
+
+
+class ReservationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    resource_id: int
+    team_id: int | None = None
+    start_at: datetime
+    end_at: datetime
+    purpose: str | None = None
+    status: ReservationStatus
+    rejection_reason: str | None = None
+    needs_review: bool = False
+    decided_by: int | None = None
+    decided_at: datetime | None = None
+    created_at: datetime | None = None
+
+
 class ReservationResourceSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
