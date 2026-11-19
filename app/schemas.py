@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, time
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from app.models import ResourceStatus, Role
 
@@ -143,3 +143,27 @@ class AvailabilitySlot(BaseModel):
     end_at: datetime
     status: SlotStatus
     free_places: int = Field(description="Teams that can still book this slot")
+
+
+class MaintenanceCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+    reason: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def _end_after_start(self) -> "MaintenanceCreate":
+        if self.end_at <= self.start_at:
+            raise ValueError("end_at must be after start_at")
+        return self
+
+
+class MaintenanceOut(BaseModel):
+    id: int
+    resource_id: int
+    start_at: datetime
+    end_at: datetime
+    reason: str
+    created_by: int | None
+    cancelled_at: datetime | None
