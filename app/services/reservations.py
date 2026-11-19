@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -10,7 +10,6 @@ from app.models import (
     OperatingSchedule,
     Reservation,
     ReservationStatus,
-    Resource,
     ResourceStatus,
     Role,
     Team,
@@ -19,6 +18,12 @@ from app.models import (
 from app.schemas import ReservationCreate
 from app.services.availability import APPROVED_STATUSES, PENDING_STATUSES, _as_utc, _overlaps
 from app.services.schedule import SLOT_MINUTES, local_timezone
+from app.services.sharing import (
+    BLOCKING_STATUSES,
+    CapacityConflictError,
+    ensure_capacity_available,
+    lock_resource_for_booking,
+)
 
 ALLOWED_TRANSITIONS: dict[ReservationStatus, set[ReservationStatus]] = {
     ReservationStatus.PENDING: {
@@ -119,9 +124,8 @@ def create_reservation_request(
 
     _validate_slot_interval(local_start, local_end)
 
-    resource = db.get(Resource, body.resource_id)
-    if resource is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resource not found")
+    # Row-level lock on resource (SELECT ... FOR UPDATE in PostgreSQL)
+    resource = lock_resource_for_booking(db, body.resource_id)
 
     if resource.status == ResourceStatus.MAINTENANCE:
         raise HTTPException(
@@ -164,6 +168,17 @@ def create_reservation_request(
     if team_id is not None and db.get(Team, team_id) is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Team not found")
 
+    try:
+        ensure_capacity_available(
+            db,
+            resource,
+            start_utc,
+            end_utc,
+            statuses=BLOCKING_STATUSES,
+        )
+    except CapacityConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
     existing = list(
         db.scalars(
             select(Reservation).where(
@@ -177,22 +192,6 @@ def create_reservation_request(
         for res in existing
         if _overlaps((start_utc, end_utc), (_as_utc(res.start_at), _as_utc(res.end_at)))
     ]
-
-    step = timedelta(minutes=SLOT_MINUTES)
-    cursor = start_utc
-    while cursor < end_utc:
-        sub_slot = (cursor, cursor + step)
-        concurrent = sum(
-            1
-            for res in overlapping
-            if _overlaps(sub_slot, (_as_utc(res.start_at), _as_utc(res.end_at)))
-        )
-        if concurrent >= resource.max_concurrent_teams:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                "Requested slot is already occupied",
-            )
-        cursor += step
 
     if any(
         res.user_id == user.id or (team_id is not None and res.team_id == team_id)
@@ -280,6 +279,20 @@ def transition_reservation(
 
     ensure_resource_admin(reservation.resource, user)
     validate_transition(reservation.status, target_status)
+
+    if target_status == ReservationStatus.APPROVED:
+        resource = lock_resource_for_booking(db, reservation.resource_id)
+        try:
+            ensure_capacity_available(
+                db,
+                resource,
+                reservation.start_at,
+                reservation.end_at,
+                statuses=APPROVED_STATUSES,
+                exclude_reservation_id=reservation.id,
+            )
+        except CapacityConflictError as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 
     if target_status == ReservationStatus.REJECTED:
         if not rejection_reason or not rejection_reason.strip():
