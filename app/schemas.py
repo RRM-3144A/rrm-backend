@@ -241,3 +241,9 @@ class PendingReservationOut(BaseModel):
 class ReservationRescheduleRequest(BaseModel):
     start_at: datetime
     end_at: datetime
+
+class TeamUsageOut(BaseModel):
+    team_id: int | None = None
+    team_name: str
+    reservations_count: int
+    reserved_hours: float
