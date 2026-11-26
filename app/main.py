@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import (
+    approvals,
     auth,
     availability,
     categories,
@@ -34,4 +35,5 @@ app.include_router(schedule.router)
 app.include_router(availability.router)
 app.include_router(maintenance.router)
 app.include_router(reservations.router)
+app.include_router(approvals.router)
 app.include_router(waitlist.router)
