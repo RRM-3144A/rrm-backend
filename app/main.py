@@ -12,6 +12,7 @@ from app.routers import (
     resources,
     schedule,
     users,
+    waitlist,
 )
 
 app = FastAPI(title="Research Resource Manager API", version="0.1.0")
@@ -33,3 +34,4 @@ app.include_router(schedule.router)
 app.include_router(availability.router)
 app.include_router(maintenance.router)
 app.include_router(reservations.router)
+app.include_router(waitlist.router)
