@@ -247,3 +247,19 @@ class TeamUsageOut(BaseModel):
     team_name: str
     reservations_count: int
     reserved_hours: float
+class WaitlistCreate(BaseModel):
+    resource_id: int
+    start_at: datetime
+    end_at: datetime
+
+
+class WaitlistEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    resource_id: int
+    start_at: datetime
+    end_at: datetime
+    notified_at: datetime | None = None
+    created_at: datetime | None = None
