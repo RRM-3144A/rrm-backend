@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import ensure_resource_admin
 from app.models import (
     MaintenanceWindow,
+    Notification,
     OperatingSchedule,
     Reservation,
     ReservationStatus,
@@ -251,13 +252,15 @@ def validate_transition(
         )
 
 
-def cancel_reservation(
+def cancel_reservation_with_notifications(
     db: Session,
     reservation: Reservation,
     user: User,
     *,
     now: datetime | None = None,
-) -> Reservation:
+) -> tuple[Reservation, list[Notification]]:
+    from app.services.waitlist import notify_waitlist_on_cancellation
+
     validate_transition(reservation.status, ReservationStatus.CANCELLED)
 
     if not _is_resource_admin(reservation, user):
@@ -273,12 +276,26 @@ def cancel_reservation(
 
     reservation.status = ReservationStatus.CANCELLED
     reservation.needs_review = False
+    db.flush()
+
+    notifications = notify_waitlist_on_cancellation(db, reservation, now=now)
     db.commit()
     db.refresh(reservation)
+    return reservation, notifications
+
+
+def cancel_reservation(
+    db: Session,
+    reservation: Reservation,
+    user: User,
+    *,
+    now: datetime | None = None,
+) -> Reservation:
+    reservation, _ = cancel_reservation_with_notifications(db, reservation, user, now=now)
     return reservation
 
 
-def transition_reservation(
+def transition_reservation_with_notifications(
     db: Session,
     reservation: Reservation,
     user: User,
@@ -286,9 +303,9 @@ def transition_reservation(
     *,
     rejection_reason: str | None = None,
     now: datetime | None = None,
-) -> Reservation:
+) -> tuple[Reservation, list[Notification]]:
     if target_status == ReservationStatus.CANCELLED:
-        return cancel_reservation(db, reservation, user, now=now)
+        return cancel_reservation_with_notifications(db, reservation, user, now=now)
 
     ensure_resource_admin(reservation.resource, user)
     validate_transition(reservation.status, target_status)
@@ -322,8 +339,27 @@ def transition_reservation(
     reservation.status = target_status
     db.commit()
     db.refresh(reservation)
-    return reservation
+    return reservation, []
 
+
+def transition_reservation(
+    db: Session,
+    reservation: Reservation,
+    user: User,
+    target_status: ReservationStatus,
+    *,
+    rejection_reason: str | None = None,
+    now: datetime | None = None,
+) -> Reservation:
+    reservation, _ = transition_reservation_with_notifications(
+        db,
+        reservation,
+        user,
+        target_status,
+        rejection_reason=rejection_reason,
+        now=now,
+    )
+    return reservation
 
 def list_reservations_needing_review(
     db: Session, admin: User, resource_id: int | None = None

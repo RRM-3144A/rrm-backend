@@ -18,7 +18,14 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import Notification, NotificationType, Reservation, ReservationStatus, User
+from app.models import (
+    Notification,
+    NotificationType,
+    Reservation,
+    ReservationStatus,
+    User,
+    WaitlistEntry,
+)
 from app.services.email import EmailSender, get_sender
 from app.services.schedule import local_timezone
 
@@ -101,11 +108,15 @@ def decision_email(reservation: Reservation) -> tuple[NotificationType, EmailCon
 
 
 def _create(
-    db: Session, user: User, reservation: Reservation, kind: NotificationType, content: EmailContent
+    db: Session,
+    user: User,
+    reservation: Reservation | None,
+    kind: NotificationType,
+    content: EmailContent,
 ) -> Notification:
     notification = Notification(
         user_id=user.id,
-        reservation_id=reservation.id,
+        reservation_id=reservation.id if reservation is not None else None,
         type=kind,
         subject=content.subject,
         body=content.body,
@@ -133,6 +144,7 @@ def notify_decision(db: Session, reservation: Reservation) -> Notification:
     db.flush()
     return notification
 
+
 def notify_training_completed(db: Session, reservation: Reservation) -> Notification:
     """Notification for the requester that training is completed and approval resumes."""
     resource = reservation.resource.name
@@ -148,6 +160,26 @@ def notify_training_completed(db: Session, reservation: Reservation) -> Notifica
     notification = _create(db, reservation.user, reservation, NotificationType.NEW_REQUEST, content)
     db.flush()
     return notification
+
+
+def notify_waitlist_slot_available(db: Session, entry: WaitlistEntry) -> Notification:
+    """Notification for a waitlisted user when an overlapping reservation is cancelled."""
+    user = db.get(User, entry.user_id)
+    resource = entry.resource.name
+    interval = format_interval(entry.start_at, entry.end_at)
+    content = EmailContent(
+        subject=f"Slot disponibil: {resource}",
+        body=(
+            f"Bună, {user.first_name},\n\n"
+            f"S-a eliberat un loc pentru {resource} în intervalul {interval}, "
+            f"pentru care te-ai înscris pe lista de așteptare. Poți plasa acum o rezervare."
+            + _footer()
+        ),
+    )
+    notification = _create(db, user, None, NotificationType.NEW_REQUEST, content)
+    db.flush()
+    return notification
+
 
 def deliver_with(db: Session, notification_ids: list[int], sender: EmailSender) -> None:
     """Sends the unsent notifications; a failed e-mail is logged and stays unsent."""

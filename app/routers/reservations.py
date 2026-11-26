@@ -21,12 +21,12 @@ from app.services.admin_decisions import (
 from app.services.admin_requests import list_admin_pending_reservations
 from app.services.notifications import send_in_background
 from app.services.reservations import (
-    cancel_reservation,
+    cancel_reservation_with_notifications,
     create_reservation_request,
     get_reservation_or_404,
     list_reservations_needing_review,
     reschedule_reservation,
-    transition_reservation,
+    transition_reservation_with_notifications,
 )
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
@@ -63,17 +63,20 @@ def create_reservation(
 def update_reservation_status(
     reservation_id: int,
     body: ReservationStatusUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Reservation:
     reservation = get_reservation_or_404(db, reservation_id)
-    return transition_reservation(
+    updated, notifications = transition_reservation_with_notifications(
         db,
         reservation,
         user,
         body.status,
         rejection_reason=body.rejection_reason,
     )
+    send_in_background(background_tasks, notifications)
+    return updated
 
 
 @router.post("/{reservation_id}/approve", response_model=ReservationOut)
@@ -130,18 +133,24 @@ def reschedule_reservation_endpoint(
 @router.post("/{reservation_id}/cancel", response_model=ReservationOut)
 def cancel_reservation_action(
     reservation_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Reservation:
     reservation = get_reservation_or_404(db, reservation_id)
-    return cancel_reservation(db, reservation, user)
+    cancelled, notifications = cancel_reservation_with_notifications(db, reservation, user)
+    send_in_background(background_tasks, notifications)
+    return cancelled
 
 
 @router.delete("/{reservation_id}", response_model=ReservationOut)
 def delete_reservation(
     reservation_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Reservation:
     reservation = get_reservation_or_404(db, reservation_id)
-    return cancel_reservation(db, reservation, user)
+    cancelled, notifications = cancel_reservation_with_notifications(db, reservation, user)
+    send_in_background(background_tasks, notifications)
+    return cancelled
