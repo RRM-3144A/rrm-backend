@@ -36,6 +36,13 @@ nothing new. Accounts listed in `ADMIN_EMAILS` become administrators of every re
 To recreate the database from scratch: `alembic downgrade base && alembic upgrade head`,
 then run the seed again.
 
+## Demo sign-in (presentation)
+
+Without a Google OAuth client, set `DEMO_LOGIN=true` in `.env`. Then `POST /auth/demo`
+with `{"email": "maria.lungu@student.usv.ro"}` returns a token for that seeded account
+(the `@student.usv.ro` rule still applies). The frontend's account chooser uses it.
+Never enable it in production.
+
 ## Tests
 
 ```bash

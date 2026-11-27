@@ -19,6 +19,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://rrm:rrm@db:5432/rrm
       CORS_ORIGINS: http://localhost:3000
+      DEMO_LOGIN: ${DEMO_LOGIN:-false}
     ports:
       - "8000:8000"
     depends_on:
