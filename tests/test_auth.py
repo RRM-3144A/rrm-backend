@@ -111,3 +111,14 @@ def test_me_with_expired_token_is_401(client, monkeypatch):
     response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 401
+
+
+def test_precreated_account_takes_name_from_google(client, db, google_claims, make_user):
+    user = make_user(email="ana.pop@student.usv.ro", first_name="Ana", last_name="Admin")
+    google_claims.update(_claims())
+
+    response = client.post("/auth/google", json={"id_token": "valid"})
+
+    assert response.status_code == 200
+    assert response.json()["user"]["id"] == user.id
+    assert response.json()["user"]["last_name"] == "Pop"
