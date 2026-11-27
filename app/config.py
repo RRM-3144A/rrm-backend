@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
     admin_emails: str = ""
+    # Demo sign-in (POST /auth/demo) for presentations without a Google OAuth client.
+    # Never enable it in production.
+    demo_login: bool = False
     timezone: str = "Europe/Bucharest"
     frontend_url: str = "http://localhost:3000"
     # E-mail: with no SMTP host the messages are only written to the log (development).

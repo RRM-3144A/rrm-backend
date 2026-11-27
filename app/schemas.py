@@ -10,6 +10,10 @@ class GoogleLoginRequest(BaseModel):
     id_token: str
 
 
+class DemoLoginRequest(BaseModel):
+    email: str
+
+
 class TeamOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -117,6 +121,7 @@ class ResourceOut(ResourceFields):
     category: CategoryBase
     category_id: int
     admins: list[AdminSummary]
+    schedules: list["ScheduleInterval"] = []
 
 
 class ScheduleInterval(BaseModel):
@@ -263,3 +268,13 @@ class WaitlistEntryOut(BaseModel):
     end_at: datetime
     notified_at: datetime | None = None
     created_at: datetime | None = None
+
+
+class MyReservationOut(ReservationOut):
+    """A reservation in the signed-in user's list, with its resource and team."""
+
+    resource: ReservationResourceSummary
+    team: TeamOut | None = None
+
+
+ResourceOut.model_rebuild()

@@ -1,10 +1,12 @@
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, status
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models import Reservation, User
 from app.schemas import (
+    MyReservationOut,
     PendingReservationOut,
     ReservationCreate,
     ReservationOut,
@@ -30,6 +32,22 @@ from app.services.reservations import (
 )
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
+
+
+@router.get("/me", response_model=list[MyReservationOut])
+def get_my_reservations(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[Reservation]:
+    """The signed-in user's reservations ("Rezervările mele"), newest first."""
+    return list(
+        db.scalars(
+            select(Reservation)
+            .options(joinedload(Reservation.resource), joinedload(Reservation.team))
+            .where(Reservation.user_id == user.id)
+            .order_by(Reservation.start_at.desc(), Reservation.id.desc())
+        ).unique()
+    )
 
 
 @router.get("/pending", response_model=list[PendingReservationOut])

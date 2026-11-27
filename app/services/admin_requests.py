@@ -22,7 +22,7 @@ def list_admin_pending_reservations(
     *,
     resource_id: int | None = None,
 ) -> list[PendingReservationOut]:
-    """Returns PENDING reservations for resources administered by `admin`, with history flags."""
+    """Returns PENDING and AWAITING_TRAINING reservations for resources administered by `admin`, with history flags."""
     administered_resource_ids = select(resource_admins.c.resource_id).where(
         resource_admins.c.user_id == admin.id
     )
@@ -35,7 +35,9 @@ def list_admin_pending_reservations(
             joinedload(Reservation.team),
         )
         .where(
-            Reservation.status == ReservationStatus.PENDING,
+            Reservation.status.in_(
+                [ReservationStatus.PENDING, ReservationStatus.AWAITING_TRAINING]
+            ),
             Reservation.resource_id.in_(administered_resource_ids),
         )
         .order_by(Reservation.start_at.asc(), Reservation.created_at.asc(), Reservation.id.asc())
