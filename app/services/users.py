@@ -25,6 +25,11 @@ def get_or_create_user(db: Session, identity: GoogleIdentity) -> User:
         db.add(user)
 
     user.google_sub = identity.sub
+    # Accounts pre-created by the seed (ADMIN_EMAILS) get their real name from Google.
+    if identity.first_name:
+        user.first_name = identity.first_name
+    if identity.last_name:
+        user.last_name = identity.last_name
     if identity.email in settings.admin_email_set:
         user.role = Role.ADMIN
     db.commit()
